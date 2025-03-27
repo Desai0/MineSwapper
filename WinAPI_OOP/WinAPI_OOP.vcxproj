@@ -134,12 +134,6 @@
     <ClInclude Include="wapi_paintbox.h" />
     <ClInclude Include="wapi_window.h" />
   </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="wapi_control.cpp" />
-    <ClCompile Include="wapi_nontopcontrol.cpp" />
-    <ClCompile Include="wapi_paintbox.cpp" />
-    <ClCompile Include="wapi_window.cpp" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

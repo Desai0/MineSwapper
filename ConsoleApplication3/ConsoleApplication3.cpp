@@ -1,119 +1,217 @@
 ﻿#include <iostream>
-#include <wapi_oop.h>
+#include <vector>
+#include <string>
 #include <random>
+#include <memory>
+#include "../WinAPI_OOP/wapi_oop.h"
+#include "../WinAPI_OOP/wapi_interactive.h"
+#include "../WinAPI_OOP/wapi_control.h"
+#include "../WinAPI_OOP/wapi_nontopcontrol.h"
+#include "../WinAPI_OOP/wapi_paintbox.h"
+#include "../WinAPI_OOP/wapi_window.h"
 
-//size_t check(size_t x, size_t y) {
-//	size_t 
-//}
+const int GRID_SIZE = 10;
+const int NUM_MINES = 11;
 
 class MainWindow : public Window {
-	std::unique_ptr<Button> button[10][10];
-	short int matrica[10][10];
-	size_t game_started = 0;
-	short int tapped;
+    std::unique_ptr<Button> button[GRID_SIZE][GRID_SIZE];
+    short int matrica[GRID_SIZE][GRID_SIZE];
+    bool revealed[GRID_SIZE][GRID_SIZE];
+    bool game_over = false;
+    bool first_click = true;
+    int revealed_count = 0;
+
+    std::random_device rd;
+    std::mt19937 gen;
+    std::uniform_int_distribution<int> distrib;
 
 public:
-	MainWindow(HINSTANCE hInstance) : Window(hInstance) {
-		InitComponent(nullptr);
+    MainWindow(HINSTANCE hInstance) :
+        Window(hInstance),
+        gen(rd()),
+        distrib(0, GRID_SIZE - 1)
+    {
+        InitComponent(nullptr);
 
-		for (size_t i = 0; i < 10; ++i) {
-			for (size_t j = 0; j < 10; ++j) {
-				button[i][j] = std::make_unique<Button>(hInstance, 10 * i + j, this);
-				button[i][j]->SetPosition(10 * j * 5, 10 * i * 5);
-				button[i][j]->SetSize(50, 50);
-				button[i][j]->SetText(L" ");
-			}
-		}
+        for (int i = 0; i < GRID_SIZE; ++i) {
+            for (int j = 0; j < GRID_SIZE; ++j) {
+                button[i][j] = std::make_unique<Button>(hInstance, i * GRID_SIZE + j, this);
+                button[i][j]->SetPosition(j * 50, i * 50);
+                button[i][j]->SetSize(50, 50);
+                button[i][j]->SetText(L" ");
+                matrica[i][j] = 0;
+                revealed[i][j] = false;
+            }
+        }
 
+        SetText(L"Minesweeper");
+        SetSize(GRID_SIZE * 50 + 16, GRID_SIZE * 50 + 40);
+    }
 
-		for (size_t i = 0; i < 10; ++i) {
-			for (size_t j = 0; j < 10; ++j) {
-				matrica[i][j] = 0;
-			}
-		}
+    void SetupBoard(int initial_r, int initial_c) {
+        for (int i = 0; i < GRID_SIZE; ++i) {
+            for (int j = 0; j < GRID_SIZE; ++j) {
+                matrica[i][j] = 0;
+                revealed[i][j] = false;
+            }
+        }
+        game_over = false;
+        revealed_count = 0;
+        first_click = false;
 
-		
-				
+        int mines_placed = 0;
+        while (mines_placed < NUM_MINES) {
+            int r = distrib(gen);
+            int c = distrib(gen);
+            if (matrica[r][c] != -1 && !(r == initial_r && c == initial_c)) {
+                matrica[r][c] = -1;
+                mines_placed++;
+            }
+        }
 
-		/*b = std::make_unique<Button>(hInstance, 10, this);
-		b->SetPosition(10, 10);
-		b->SetSize(50, 50);
-		b->SetText(L"Тыкай");*/
+        for (int r = 0; r < GRID_SIZE; ++r) {
+            for (int c = 0; c < GRID_SIZE; ++c) {
+                if (matrica[r][c] == -1) continue;
+                int count = 0;
+                for (int dr = -1; dr <= 1; ++dr) {
+                    for (int dc = -1; dc <= 1; ++dc) {
+                        if (dr == 0 && dc == 0) continue;
+                        int nr = r + dr;
+                        int nc = c + dc;
+                        if (nr >= 0 && nr < GRID_SIZE && nc >= 0 && nc < GRID_SIZE) {
+                            if (matrica[nr][nc] == -1) count++;
+                        }
+                    }
+                }
+                matrica[r][c] = count;
+            }
+        }
+    }
 
+    void RevealCell(int r, int c) {
+        // Проверки границ и уже открытых клеток
+        if (r < 0 || r >= GRID_SIZE || c < 0 || c >= GRID_SIZE || revealed[r][c]) {
+            return;
+        }
 
-		SetText(L"Мое окно");
-		SetSize(516, 540);
+        revealed[r][c] = true;
+        button[r][c]->SetEnabled(false);
+        revealed_count++;
 
-	}
+        short value = matrica[r][c];
+        if (value > 0) {
+            button[r][c]->SetText(std::to_wstring(value));
+        }
+        else {
+            button[r][c]->SetText(L" ");
+        }
 
-	LRESULT OnCommand(WPARAM wp, LPARAM lp) override {
-		WORD id = LOWORD(wp), state = HIWORD(wp);
+        if (value == 0) {
+            for (int dr = -1; dr <= 1; ++dr) {
+                for (int dc = -1; dc <= 1; ++dc) {
+                    RevealCell(r + dr, c + dc);
+                }
+            }
+        }
+    }
 
-		if (id == button[id / 10][id % 10]->GetId() && state == BN_CLICKED) {
+    void CheckWinCondition() {
+        if (game_over) return;
 
-			if (game_started == 0) {
-				game_started = 1;
-				for (size_t i = 0; i < 10; ++i) {
-					while (true) {
-						std::random_device dev;
-						std::mt19937 rnd(dev());
-						std::uniform_int_distribution<size_t> dist(0, 9);
-						size_t random = dist(rnd);
-						size_t random2 = dist(rnd);
-						if (matrica[random][random2] == 0) {
-							matrica[random][random2] = -1;
+        int total_cells = GRID_SIZE * GRID_SIZE;
+        int safe_cells = total_cells - NUM_MINES;
 
-							for (short int i = -1; i < 2; ++i) {
-								for (short int j = -1; j < 2; ++j) {
-									if (!(random == 0 || random == 9 || random2 == 0 || random2 == 9)) {
-										if (matrica[random + i][random2 + j] != -1) {
-											matrica[random + i][random2 + j] += 1;
-										}
-									}
-									else {
-										continue;
-									}
-									
-								}
-							}
-							
-							break;
-						}
-						else {
-							continue;
-						}
-					}
-				}
-				tapped = matrica[id / 10][id % 10];
-				button[id / 10][id % 10]->SetText(std::to_wstring(tapped));
-			} ///////////////
-			else if (id == button[id / 10][id % 10]->GetId() && state == BN_CLICKED) {
-				tapped = matrica[id / 10][id % 10];
-				button[id / 10][id % 10]->SetText(std::to_wstring(tapped));
-			}
-			/*MessageBoxW(hwnd, L"Вы нажали кнопку!", L"Оповещение", MB_OK);*/
-			
-		}
+        if (revealed_count == safe_cells) {
+            game_over = true;
+            MessageBox(hwnd, L"Поздравляем, вы победили!", L"Победа!", MB_OK | MB_ICONINFORMATION);
 
-		return 0;
-	}
+            for (int i = 0; i < GRID_SIZE; ++i) {
+                for (int j = 0; j < GRID_SIZE; ++j) {
+                    if (!revealed[i][j]) {
+                        button[i][j]->SetEnabled(false);
+                        button[i][j]->SetText(L"🚩"); //Можно так иконки ставить, рофлан
+                    }
+                }
+            }
+        }
+    }
 
-	LRESULT OnPaint(HDC& hdc, PAINTSTRUCT& ps, WPARAM wp, LPARAM lp) override {
-		FillRect(hdc, &ps.rcPaint, reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1));
-		return 0;
-	}
+    void GameOver() {
+        if (game_over) return;
+
+        game_over = true;
+        MessageBox(hwnd, L"Вы проиграли!", L"Игра окончена", MB_OK | MB_ICONSTOP);
+
+        // Показ мин (как и раньше)
+        for (int i = 0; i < GRID_SIZE; ++i) {
+            for (int j = 0; j < GRID_SIZE; ++j) {
+                if (!revealed[i][j]) {
+                    button[i][j]->SetEnabled(false);
+                    if (matrica[i][j] == -1) {
+                        button[i][j]->SetText(L"💣");
+                    }
+                }
+                else if (matrica[i][j] == -1) {
+                    button[i][j]->SetEnabled(false);
+                    button[i][j]->SetText(L"💥");
+                }
+            }
+        }
+    }
+
+    LRESULT OnCommand(WPARAM wp, LPARAM lp) override {
+        WORD id = LOWORD(wp);
+        WORD state = HIWORD(wp);
+
+        if (state == BN_CLICKED && !game_over) {
+            int r = id / GRID_SIZE;
+            int c = id % GRID_SIZE;
+
+            if (r < 0 || r >= GRID_SIZE || c < 0 || c >= GRID_SIZE) return 0;
+
+            if (first_click) {
+                SetupBoard(r, c);
+            }
+
+            if (revealed[r][c]) {
+                return 0;
+            }
+
+            if (matrica[r][c] == -1) {
+                revealed[r][c] = true;
+                GameOver();
+            }
+            else {
+                RevealCell(r, c);
+                CheckWinCondition();
+            }
+        }
+        return 0;
+    }
+
+    LRESULT OnPaint(HDC& hdc, PAINTSTRUCT& ps, WPARAM wp, LPARAM lp) override {
+        FillRect(hdc, &ps.rcPaint, reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1));
+        return 0;
+    }
 
 protected:
-	DECLARE_CLASS_NAME(MainWindow);
+    DECLARE_CLASS_NAME(MainWindow);
 };
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR cmdline, int nCmdShow) {
-	RegisterControl(MainWindow, hInstance);
-
-	MainWindow mw(hInstance);
-	mw.Show();
-
-	mw.ProcessMessages();
-
-	return 0;
+    try {
+        RegisterControl(MainWindow, hInstance);
+        MainWindow mw(hInstance);
+        mw.Show();
+        mw.ProcessMessages();
+    }
+    catch (const std::exception& e) {
+        MessageBoxA(NULL, e.what(), "Unhandled Exception", MB_OK | MB_ICONERROR);
+        return 1;
+    }
+    catch (...) {
+        MessageBoxA(NULL, "An unknown error occurred.", "Unhandled Exception", MB_OK | MB_ICONERROR);
+        return 1;
+    }
+    return 0;
 }
